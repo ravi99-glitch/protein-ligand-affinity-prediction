@@ -18,10 +18,13 @@ This project aims to:
 - Evaluate the added value of structure-based neural networks
 
 ## Requirements
+The project runs in a Conda environment defined in `pa2.yml`
 
-Python 3.9 or higher
-
-PyTorch, Scikit-learn, RDKit, BioPython
+**Main dependencies:**
+Python 3.9
+NumPy, Pandas, Matplotlib, Seaborn, tqdm
+scikit-learn, XGBoost
+BioPython, RDKit
 
 ## Project Work
 

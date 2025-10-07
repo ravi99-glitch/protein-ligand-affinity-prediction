@@ -1,0 +1,41 @@
+name: pa2
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Core
+  - python=3.9
+  - pip
+  - numpy
+  - pandas
+  - tqdm
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - xgboost
+
+  # Bioinformatics
+  - biopython
+  - pdbfixer
+  - blast
+
+  # Cheminformatics
+  - rdkit
+
+  # Utility
+  - jupyterlab
+  - notebook
+  - ipykernel
+
+  # Optional GPU setup (for future model expansion)
+  - pytorch=2.3
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8
+
+  # Pip packages (lightweight helpers)
+  - pip:
+      - biopandas
+      - loguru
+      - rich

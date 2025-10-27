@@ -41,14 +41,14 @@ def evaluate_model(model, train_data, test_datasets, title, fit=True, figsize=(1
         ax.set_ylabel("Predicted pK")
         ax.grid(True, linestyle='--', alpha=0.5)
 
-    if save_path:
-            # Entferne jegliche Dateiendung und ersetze sie durch '.svg'
-            base, _ = os.path.splitext(save_path)
-            final_save_path = base + ".svg"
+    fig.suptitle(title, fontsize=14, y=1.02)
 
-            # Speichere die Datei explizit als SVG
-            plt.savefig(final_save_path, format='svg', bbox_inches='tight')
-            plt.close(fig)
+    if save_path:
+        plt.savefig(save_path, format='svg', bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+    
+    plt.close(fig)
+
 
 def save_cv_results(random_search, filename):
     """
@@ -57,11 +57,12 @@ def save_cv_results(random_search, filename):
     cv_df = pd.DataFrame(random_search.cv_results_)
     cv_df.to_csv(filename, index=False)
 
+
 # --- IGNORE ---
 
 df = pd.read_pickle("PDBbind_protein_ligands_embeddings_min_MoLFormer.pkl")
 
-#Concatenate protein and ligand embeddings
+# Concatenate protein and ligand embeddings
 df["protein_embedding"] = df["protein_embedding"].apply(
     lambda x: np.concatenate(x) if isinstance(x, (list, np.ndarray)) and np.array(x).ndim > 1 else np.array(x)
 )
@@ -87,7 +88,6 @@ test_ids_dict = {
 # Load PDBbind cleansplit json and split into train and test sets
 with open("PDBbind_cleansplit_data_split.json", "r") as file:
     cleansplit_data_split = json.load(file)
-
 
 train_ids_clean = cleansplit_data_split["train"]
 test_ids_clean = set()
@@ -172,39 +172,37 @@ def build_cv_splits(train_df, all_val_ids_list, id_col="pdb_id"):
     return cv_splits
 
 cv_splits_original = build_cv_splits(train_df_orig, val_splits_original)
-cv_splits_cleansplit= build_cv_splits(train_df_clean, val_splits_cleansplit)
+cv_splits_cleansplit = build_cv_splits(train_df_clean, val_splits_cleansplit)
 
 # ------------------------------------------------------------------------------
 # Linear Regression
 model = LinearRegression()
 
-# Predict an evaluate for all test sets
 evaluate_model(
     model,
     (X_train_orig, y_train_orig),
     test_datasets,
     title="Linear Regression - Performance on CASF Test Sets (Embeddings) (Original Split)",
-    save_path="plots/lin_orig_split.png"
+    save_path="plots/lin_orig_split.svg"
 )
-#------- -----------------------------------------------------------------------
-# Model
+
+# HistGradientBoosting Baseline
 hgb_model = HistGradientBoostingRegressor(
     learning_rate=0.01,
     max_iter=300,
     max_depth=6,
     random_state=42
 )
-hgb_model.fit(X_train_orig, y_train_orig)
 
-# Predict an evaluate for all test sets
 evaluate_model(
     hgb_model,
     (X_train_orig, y_train_orig),
     test_datasets,
     title="HistGradientBoostingRegressor - Performance on CASF Test Sets (Embeddings) (Original Split)",
-    save_path="plots/hist_orig_split.png"
+    save_path="plots/hist_orig_split.svg"
 )
-#------------------------------------------------------------------------------
+
+# HistGradientBoosting - RandomizedSearchCV
 hgb_model = HistGradientBoostingRegressor(random_state=42)
 
 param_dist = {
@@ -221,7 +219,7 @@ random_search = RandomizedSearchCV(
     param_distributions=param_dist,
     n_iter=20,  
     scoring='r2',
-    cv=cv_splits_original, # predefined splits 
+    cv=cv_splits_original,
     verbose=2, 
     n_jobs=-1,
     random_state=42,
@@ -233,21 +231,37 @@ save_cv_results(random_search, "plots/hgb_orig_split_cv_results.csv")
 print(random_search.best_params_)
 print(f"Best CV R²: {random_search.best_score_:.3f}")
 
-# Best model 
 best_hgb = random_search.best_estimator_
 
-# Predict and evaluate for all test sets
 evaluate_model(
     best_hgb,
     (X_train_orig, y_train_orig),
     test_datasets,
     title="Tuned HistGradientBoostingRegressor - Performance on CASF Test Sets (Embeddings) (Original Split)",
-    save_path="plots/hist_orig_split_tuned.png", 
+    save_path="plots/hist_orig_split_tuned.svg", 
     fit=False
 )
 
-# Model with RandomizedSearchCV for CleanSplit
-# Parameter grid for RandomizedSearchCV
+# HistGradientBoosting Baseline - CleanSplit
+hgb_model = HistGradientBoostingRegressor(
+    learning_rate=0.01,
+    max_iter=300,
+    max_depth=6,
+    random_state=42,
+    early_stopping=True
+)
+
+evaluate_model(
+    hgb_model,
+    (X_train_clean, y_train_clean),
+    test_datasets_clean,
+    title="HistGradientBoostingRegressor - Performance on CASF Test Sets (Embeddings) (Clean Split)",
+    save_path="plots/hist_clean_split.svg"
+)
+
+# HistGradientBoosting - RandomizedSearchCV - CleanSplit
+hgb_model = HistGradientBoostingRegressor(random_state=42)
+
 param_dist = {
     "learning_rate": uniform(0.005, 0.05),
     "max_iter": randint(100, 600),
@@ -257,33 +271,12 @@ param_dist = {
     "max_bins": randint(100, 255)
 }
 
-# Model with RandomizedSearchCV
-
-hgb_model = HistGradientBoostingRegressor(
-    learning_rate=0.01,
-    max_iter=300,
-    max_depth=6,
-    random_state=42,
-    early_stopping=True
-)
-
-# Predict an evaluate for all test sets
-evaluate_model(
-    hgb_model,
-    (X_train_clean, y_train_clean),
-    test_datasets_clean,
-    title="HistGradientBoostingRegressor - Performance on CASF Test Sets (Embeddings) (Clean Split)",
-    save_path="plots/hist_clean_split.png"
-)
-# ------------------------------------------------------------------------------
-hgb_model = HistGradientBoostingRegressor(random_state=42)
-
 random_search = RandomizedSearchCV(
     hgb_model,
     param_distributions=param_dist,
     n_iter=20,  
     scoring='r2',
-    cv=cv_splits_cleansplit, # predefined splits 
+    cv=cv_splits_cleansplit,
     verbose=2, 
     n_jobs=-1,
     random_state=42,
@@ -295,21 +288,18 @@ save_cv_results(random_search, "plots/hgb_clean_split_cv_results.csv")
 print(random_search.best_params_)
 print(f"Best CV R²: {random_search.best_score_:.3f}")
 
-# Best model 
 best_hgb = random_search.best_estimator_
 
-# Predict and evaluate for all test sets
 evaluate_model(
     best_hgb,
     (X_train_clean, y_train_clean),
     test_datasets_clean,
     title="Tuned HistGradientBoostingRegressor - Performance on CASF Test Sets (Embeddings) (Clean Split)",
-    save_path="plots/hist_clean_split_tuned.png", 
+    save_path="plots/hist_clean_split_tuned.svg", 
     fit=False
 )
 
-# --- XGBoost ---
-# Model
+# XGBoost Baseline - Original Split
 xgb_model = XGBRegressor(
     objective="reg:squarederror",
     eval_metric="rmse",
@@ -318,15 +308,15 @@ xgb_model = XGBRegressor(
     random_state=42
 )
 
-# Predict an evaluate for all test sets
 evaluate_model(
     xgb_model,
     (X_train_orig, y_train_orig),
     test_datasets,
     title="XGBoost Regressor - Performance on CASF Test Sets (Embeddings) (Original Split)",
-    save_path="plots/xgb_orig_split.png"
+    save_path="plots/xgb_orig_split.svg"
 )
-#------------------------------------------------------------------------------ 
+
+# XGBoost - RandomizedSearchCV - Original Split
 xgb_model = XGBRegressor(
     objective='reg:squarederror',
     eval_metric='rmse',
@@ -350,7 +340,7 @@ random_search = RandomizedSearchCV(
     param_distributions=params,
     n_iter=20,                   
     scoring='r2',                
-    cv=cv_splits_original,      # predefined splits 
+    cv=cv_splits_original,
     verbose=2, 
     random_state=42,
     n_jobs=-1,
@@ -362,20 +352,18 @@ save_cv_results(random_search, "plots/xgb_orig_split_cv_results.csv")
 print(random_search.best_params_)
 print(f"Best R²: {random_search.best_score_:.4f}")
 
-# Best model
 best_model = random_search.best_estimator_
 
-# Predict an evaluate for all test sets
 evaluate_model(
     best_model,
     (X_train_orig, y_train_orig),
     test_datasets,
     title="Tuned XGBoost Regressor - Performance on CASF Test Sets (Embeddings) (Original Split)",
-    save_path="plots/xgb_orig_split_tuned.png", 
+    save_path="plots/xgb_orig_split_tuned.svg", 
     fit=False
 )
-#------------------------------------------------------------------------------
-# Model
+
+# XGBoost Baseline - CleanSplit
 xgb_model = XGBRegressor(
     objective="reg:squarederror",
     eval_metric="rmse",
@@ -384,17 +372,15 @@ xgb_model = XGBRegressor(
     random_state=42
 )
 
-# Predict an evaluate for all test sets
 evaluate_model(
     xgb_model,
     (X_train_clean, y_train_clean),
     test_datasets_clean,
     title="XGBoost Regressor - Performance on CASF Test Sets (Clean Split)",
-    save_path="plots/xgb_clean_split.png"
+    save_path="plots/xgb_clean_split.svg"
 )
 
-
-# Model with RandomizedSearchCV for CleanSplit
+# XGBoost - RandomizedSearchCV - CleanSplit
 xgb_model = XGBRegressor(
     objective='reg:squarederror',
     eval_metric='rmse',
@@ -418,7 +404,7 @@ random_search = RandomizedSearchCV(
     param_distributions=params,
     n_iter=20,                   
     scoring='r2',                
-    cv=cv_splits_cleansplit,       # predefined splits 
+    cv=cv_splits_cleansplit,
     verbose=2,
     random_state=42,
     n_jobs=-1,
@@ -426,19 +412,17 @@ random_search = RandomizedSearchCV(
 
 random_search.fit(X_train_clean, y_train_clean)
 save_cv_results(random_search, "plots/xgb_clean_split_cv_results.csv")
+
 print(random_search.best_params_)
 print(f"Best R²: {random_search.best_score_:.4f}")
 
-# Best model
 best_model = random_search.best_estimator_
 
-# Predict an evaluate for all test sets
 evaluate_model(
     best_model,
     (X_train_clean, y_train_clean),
     test_datasets_clean,
     title="Tuned XGBoost Regressor - Performance on CASF Test Sets (Embeddings) (Clean Split)",
-    save_path="plots/xgb_clean_split_tuned.png", 
+    save_path="plots/xgb_clean_split_tuned.svg", 
     fit=False
 )
-

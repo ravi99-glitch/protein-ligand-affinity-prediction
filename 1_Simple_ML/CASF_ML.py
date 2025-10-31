@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import ElasticNet
 from xgboost import XGBRegressor
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.model_selection import RandomizedSearchCV
@@ -93,7 +93,7 @@ df_all_encoded = df_all_encoded.drop(columns=drop_cols)
 df_all_encoded = df_all_encoded.dropna().reset_index(drop=True)
 
 # Load PDBbind original json and split into train and test sets
-with open(r"PDBbind_original_data_split.json", "r") as file:
+with open("PDBbind_original_data_split.json", "r") as file:
     original_data_split = json.load(file)
 
 train_ids = original_data_split["train"]
@@ -107,7 +107,7 @@ test_ids_dict = {
 }
 
 # Load PDBbind cleansplit json and split into train and test sets
-with open(r"PDBbind_cleansplit_data_split.json", "r") as file:
+with open("PDBbind_cleansplit_data_split.json", "r") as file:
     cleansplit_data_split = json.load(file)
 
 train_ids_clean = cleansplit_data_split["train"]
@@ -160,7 +160,7 @@ X_test_clean_casf2016_indep, y_test_clean_casf2016_indep = test_datasets_clean.g
 #Cross-Validation Data with specific train-validation splits
 
 # Load validation splits from JSON files
-val_splits_path = r"val_splits"
+val_splits_path = "val_splits"
 val_split_files = [f for f in os.listdir(val_splits_path) if f.endswith(".json")]
 
 original_files = sorted([f for f in val_split_files if f.startswith("original")])
@@ -202,15 +202,57 @@ print(f"Original CV folds: {len(cv_splits_original)}")
 print(f"CleanSplit CV folds: {len(cv_splits_cleansplit)}")
 # ------------------------------------------------------------------------------------------------
 # Model
-model = LinearRegression()
+model = ElasticNet(random_state=42, max_iter=10000)
 
 # Predict an evaluate for all test sets
 evaluate_model(
     model,
     (X_train_orig, y_train_orig),
     test_datasets,
-    title="Linear Regression - Performance on CASF Test Sets (Original Split)",
-    save_path = os.path.join(PLOTS_DIR, "linreg.svg")
+    title="ElasticNet - Performance on CASF Test Sets (Original Split)",
+    save_path = os.path.join(PLOTS_DIR, "elasticnet.svg")
+)
+# ------------------------------------------------------------------------------------------------
+# Paramter grid for RandomizedSearchCV
+param_dist = {
+    'alpha': uniform(0.001, 100.0),
+    'l1_ratio': uniform(0.0, 1.0)
+}
+
+random_search = RandomizedSearchCV(
+    estimator=model,
+    param_distributions=param_dist,
+    n_iter=20,                  
+    scoring='r2',               
+    cv=cv_splits_original,      # predefined splits
+    verbose=2,                  
+    n_jobs=-1,                  
+    random_state=42,  
+)
+
+random_search.fit(X_train_orig, y_train_orig)
+
+# Save CV results to CSV
+cv_results_df = pd.DataFrame(random_search.cv_results_)
+csv_path = os.path.join(CV_DIR, "elasticnet_tuned_cv.csv")
+os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+cv_results_df.to_csv(csv_path, index=False)
+print(f"CV results saved as: {csv_path}")
+
+print(random_search.best_params_)
+print(f"Best CV R²: {random_search.best_score_:.3f}")
+
+# Best model 
+best_elasticnet = random_search.best_estimator_
+
+# Predict and evaluate for all test sets
+evaluate_model(
+    best_elasticnet,
+    (X_train_orig, y_train_orig),
+    test_datasets,
+    title="Tuned ElasticNet - Performance on CASF Test Sets",
+    fit=False,
+    save_path = os.path.join(PLOTS_DIR, "elasticnet_tuned.svg")
 )
 # ------------------------------------------------------------------------------------------------
 # Model
@@ -358,17 +400,58 @@ evaluate_model(
 
 # ------------------------------------------------------------------------------------------------
 # Model
-model_clean = LinearRegression()
+model_clean = ElasticNet(random_state=42, max_iter=10000)
 
-# Predict and evaluate for all test sets
+# Predict an evaluate for all test sets
 evaluate_model(
     model_clean,
     (X_train_clean, y_train_clean),
     test_datasets_clean,
-    title="Linear Regression - Performance on CASF Test Sets (Clean Split)",
-    save_path = os.path.join(PLOTS_DIR,"linreg_clean.svg")
+    title="ElasticNet - Performance on CASF Test Sets (Clean Split)",
+    save_path = os.path.join(PLOTS_DIR, "elasticnet_clean.svg")
+)
+# ------------------------------------------------------------------------------------------------
+# Paramter grid for RandomizedSearchCV
+param_dist = {
+    'alpha': uniform(0.001, 100.0),
+    'l1_ratio': uniform(0.0, 1.0)
+}
+
+random_search = RandomizedSearchCV(
+    estimator=model_clean,
+    param_distributions=param_dist,
+    n_iter=20,                  
+    scoring='r2',               
+    cv=cv_splits_cleansplit,      # predefined splits
+    verbose=2,                  
+    n_jobs=-1,                  
+    random_state=42,  
 )
 
+random_search.fit(X_train_clean, y_train_clean)
+
+# Save CV results to CSV
+cv_results_df = pd.DataFrame(random_search.cv_results_)
+csv_path = os.path.join(CV_DIR, "elasticnet_tuned_cv_clean.csv")
+os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+cv_results_df.to_csv(csv_path, index=False)
+print(f"CV results saved as: {csv_path}")
+
+print(random_search.best_params_)
+print(f"Best CV R²: {random_search.best_score_:.3f}")
+
+# Best model 
+best_elasticnet = random_search.best_estimator_
+
+# Predict and evaluate for all test sets
+evaluate_model(
+    best_elasticnet,
+    (X_train_clean, y_train_clean),
+    test_datasets_clean,
+    title="Tuned ElasticNet - Performance on CASF Test Sets (Clean Split)",
+    fit=False,
+    save_path = os.path.join(PLOTS_DIR, "elasticnet_tuned_clean.svg")
+)
 
 # ------------------------------------------------------------------------------------------------
 

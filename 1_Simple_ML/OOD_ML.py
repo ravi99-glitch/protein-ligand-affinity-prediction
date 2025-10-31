@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import ElasticNet
 from xgboost import XGBRegressor
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.model_selection import RandomizedSearchCV
@@ -149,13 +149,13 @@ for split_name, train_df in train_df_dict.items():
         print(f"No validation splits found for {split_name}")
 
 # -----------------------------------------------------------------------------
-# Baseline Model — Linear Regression
+# Baseline ElasticNet
 # -----------------------------------------------------------------------------
 results_lr, models_lr = {}, {}
 
 for name, (X_train, y_train) in train_datasets.items():
     X_test, y_test = test_datasets[name]
-    model = LinearRegression().fit(X_train, y_train)
+    model = ElasticNet(random_state=42, max_iter=10000).fit(X_train, y_train) 
     y_pred = model.predict(X_test)
 
     r2 = r2_score(y_test, y_pred)
@@ -166,9 +166,60 @@ for name, (X_train, y_train) in train_datasets.items():
     models_lr[name] = model
 
 plot_results(test_datasets, results_lr,
-             "Linear Regression per OOD Split",
-             filename="linreg_ood")
+             "ElasticNet per OOD Split",
+             filename="elasticnet_ood")
 
+# -----------------------------------------------------------------------------
+# ElasticNet — RandomizedSearchCV 
+# -----------------------------------------------------------------------------
+param_dist_elasticnet = {
+    'alpha': uniform(0.001, 100.0),
+    'l1_ratio': uniform(0.0, 1.0)
+}
+
+results_elasticnet_tuned, best_models_elasticnet = {}, {}
+
+for name, (X_train, y_train) in train_datasets.items():
+    print(f"\nTuning ElasticNet for {name.upper()}...")
+
+    random_search = RandomizedSearchCV(
+        estimator=ElasticNet(random_state=42,max_iter=10000), 
+        param_distributions=param_dist_elasticnet,
+        n_iter=20,
+        scoring="r2",
+        verbose=2,
+        n_jobs=-1,
+        random_state=42,
+        cv=cv_folds[name]
+    )
+    random_search.fit(X_train, y_train)
+    # Annahme: save_cv_results nutzt random_search.cv_results_
+    save_cv_results(random_search, name, "ElasticNet") 
+
+    # 1. Das beste Modell ist bereits gefittet und verfügbar:
+    best_model = random_search.best_estimator_ 
+    best_params = random_search.best_params_
+    
+    # 2. Direkte Vorhersage ohne erneutes Fitten:
+    X_test, y_test = test_datasets[name]
+    y_pred = best_model.predict(X_test)
+
+    r2 = r2_score(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    pcc = np.corrcoef(y_test, y_pred)[0, 1]
+
+    results_elasticnet_tuned[name] = {
+        "best": best_model,
+        "R²": r2,
+        "RMSE": rmse,
+        "PCC": pcc,
+        "CV_R²": random_search.best_score_,
+        "BestParams": best_params
+    }
+
+plot_results(test_datasets, results_elasticnet_tuned,
+             "ElasticNet — Tuned per OOD Split",
+             filename="elasticnet_tuned_ood")
 # -----------------------------------------------------------------------------
 # HistGradientBoosting — Baseline
 # -----------------------------------------------------------------------------

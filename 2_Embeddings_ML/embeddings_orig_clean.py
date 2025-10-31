@@ -7,7 +7,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 from xgboost import XGBRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import ElasticNet
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.model_selection import RandomizedSearchCV
 from scipy.stats import uniform, randint, loguniform
@@ -175,15 +175,92 @@ cv_splits_original = build_cv_splits(train_df_orig, val_splits_original)
 cv_splits_cleansplit = build_cv_splits(train_df_clean, val_splits_cleansplit)
 
 # ------------------------------------------------------------------------------
-# Linear Regression
-model = LinearRegression()
+# ElasticNet
+model = ElasticNet(random_state=42, max_iter=10000)
 
 evaluate_model(
     model,
     (X_train_orig, y_train_orig),
     test_datasets,
-    title="Linear Regression - Performance on CASF Test Sets (Embeddings) (Original Split)",
-    save_path="plots/lin_orig_split.svg"
+    title="ElasticNet - Performance on CASF Test Sets (Embeddings) (Original Split)",
+    save_path="plots/elasticnet_orig_split.svg"
+)
+
+# ElasticNet CleanSplit
+evaluate_model(
+    model,
+    (X_train_clean, y_train_clean),
+    test_datasets_clean,
+    title="ElasticNet - Performance on CASF Test Sets (Embeddings) (Original Split)",
+    save_path="plots/elasticnet_clean_split.svg"
+)
+
+# ElasticNet - RandomizedSearchCV
+param_dist = {
+    'alpha': uniform(0.001, 100.0), 
+    'l1_ratio': uniform(0.0, 1.0)    
+}
+
+random_search = RandomizedSearchCV(
+    estimator=model,
+    param_distributions=param_dist,
+    n_iter=20,                  
+    scoring='r2',               
+    cv=cv_splits_original,      # predefined splits
+    verbose=2,                  
+    n_jobs=-1,                  
+    random_state=42,  
+)
+
+random_search.fit(X_train_orig, y_train_orig)
+save_cv_results(random_search, "plots/elasticnet_clean_split_cv_results.csv")
+
+print(random_search.best_params_)
+print(f"Best CV R²: {random_search.best_score_:.3f}")
+
+best_elasticnet = random_search.best_estimator_
+
+evaluate_model(
+    best_elasticnet,
+    (X_train_orig, y_train_orig),
+    test_datasets,
+    title="Tuned ElasticNet - Performance on CASF Test Sets (Embeddings) (Original Split)",
+    save_path="plots/elasticnet_orig_split_tuned.svg", 
+    fit=False
+)
+
+# ElasticNet - RandomizedSearchCV - CleanSplit
+param_dist = {
+    'alpha': uniform(0.001, 100.0), 
+    'l1_ratio': uniform(0.0, 1.0)    
+}
+
+random_search = RandomizedSearchCV(
+    estimator=model,
+    param_distributions=param_dist,
+    n_iter=20,                  
+    scoring='r2',               
+    cv=cv_splits_cleansplit,      # predefined splits
+    verbose=2,                  
+    n_jobs=-1,                  
+    random_state=42,  
+)
+
+random_search.fit(X_train_clean, y_train_clean)
+save_cv_results(random_search, "plots/elasticnet_orig_split_cv_results.csv")
+
+print(random_search.best_params_)
+print(f"Best CV R²: {random_search.best_score_:.3f}")
+
+best_elasticnet = random_search.best_estimator_
+
+evaluate_model(
+    best_elasticnet,
+    (X_train_clean, y_train_clean),
+    test_datasets_clean,
+    title="Tuned ElasticNet - Performance on CASF Test Sets (Embeddings) (Clean Split)",
+    save_path="plots/elasticnet_clean_split_tuned.svg", 
+    fit=False
 )
 
 # HistGradientBoosting Baseline
@@ -203,8 +280,6 @@ evaluate_model(
 )
 
 # HistGradientBoosting - RandomizedSearchCV
-hgb_model = HistGradientBoostingRegressor(random_state=42)
-
 param_dist = {
     "learning_rate": uniform(0.005, 0.05),   
     "max_iter": randint(100, 600),
@@ -243,14 +318,6 @@ evaluate_model(
 )
 
 # HistGradientBoosting Baseline - CleanSplit
-hgb_model = HistGradientBoostingRegressor(
-    learning_rate=0.01,
-    max_iter=300,
-    max_depth=6,
-    random_state=42,
-    early_stopping=True
-)
-
 evaluate_model(
     hgb_model,
     (X_train_clean, y_train_clean),
@@ -260,8 +327,6 @@ evaluate_model(
 )
 
 # HistGradientBoosting - RandomizedSearchCV - CleanSplit
-hgb_model = HistGradientBoostingRegressor(random_state=42)
-
 param_dist = {
     "learning_rate": uniform(0.005, 0.05),
     "max_iter": randint(100, 600),
@@ -317,14 +382,6 @@ evaluate_model(
 )
 
 # XGBoost - RandomizedSearchCV - Original Split
-xgb_model = XGBRegressor(
-    objective='reg:squarederror',
-    eval_metric='rmse',
-    tree_method='hist',
-    device='cuda',
-    random_state=42
-)
-
 params = {
     'n_estimators': randint(300, 1200),          
     'learning_rate': loguniform(1e-3, 0.1),       
@@ -364,14 +421,6 @@ evaluate_model(
 )
 
 # XGBoost Baseline - CleanSplit
-xgb_model = XGBRegressor(
-    objective="reg:squarederror",
-    eval_metric="rmse",
-    tree_method="hist",
-    device="cpu",  
-    random_state=42
-)
-
 evaluate_model(
     xgb_model,
     (X_train_clean, y_train_clean),
@@ -381,14 +430,6 @@ evaluate_model(
 )
 
 # XGBoost - RandomizedSearchCV - CleanSplit
-xgb_model = XGBRegressor(
-    objective='reg:squarederror',
-    eval_metric='rmse',
-    tree_method='hist',
-    device='cuda',
-    random_state=42
-)
-
 params = {
     'n_estimators': randint(300, 1200),          
     'learning_rate': loguniform(1e-3, 0.1),       

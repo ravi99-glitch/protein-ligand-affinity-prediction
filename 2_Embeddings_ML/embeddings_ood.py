@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import ElasticNet
 from xgboost import XGBRegressor
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.model_selection import RandomizedSearchCV
@@ -124,14 +124,13 @@ for split_name, train_df in train_df_dict.items():
         print(f"Warning: No validation splits found for {split_name}")
 
 # --------------------------------------------------------------------------
-# Linear Regression baseline
+# Baseline ElasticNet
 # --------------------------------------------------------------------------
-results_lr = {}
-models_lr = {}
+results_lr, models_lr = {}, {}
 
 for name, (X_train, y_train) in train_datasets.items():
     X_test, y_test = test_datasets[name]
-    model = LinearRegression()
+    model = ElasticNet(random_state=42)
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
     r2 = r2_score(y_test, y_pred)
@@ -157,8 +156,79 @@ for ax, (name, (model, y_test, y_pred)) in zip(axes, models_lr.items()):
 for ax in axes[len(test_datasets):]:
     ax.set_visible(False)
 
-save_plot("lr_baseline_per_split", "Linear Regression per OOD Split")
+save_plot("elasticnet_baseline_per_split", "ElasticNet per OOD Split")
+# --------------------------------------------------------------------------
+# ElasticNet tuned
+# --------------------------------------------------------------------------
+param_dist = {
+    'alpha': uniform(0.001, 100.0), 
+    'l1_ratio': uniform(0.0, 1.0)    
+}
 
+best_models, results_elasticnet_tuned = {}, {}
+
+for name, (X_train, y_train) in train_datasets.items():
+    print(f"\nTraining {name.upper()} split...")
+    base_model = ElasticNet(random_state=42, max_iter=10000) 
+    
+    random_search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=param_dist,
+        n_iter=20,
+        scoring="r2",
+        verbose=2,
+        n_jobs=-1,
+        random_state=42,
+        cv=cv_folds[name]
+    )
+    random_search.fit(X_train, y_train)
+    # Save CV results
+    cv_elasticnet_df = pd.DataFrame(random_search.cv_results_)
+    cv_elasticnet_df.to_csv(f"plots_molformer/elasticnet_cv_results_{name}.csv", index=False)
+    
+    best_model = random_search.best_estimator_ 
+    best_params = random_search.best_params_
+
+    best_models[name] = best_model
+    X_test, y_test = test_datasets[name]
+    y_pred = best_model.predict(X_test)
+    r2 = r2_score(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    pcc = np.corrcoef(y_test, y_pred)[0, 1]
+    
+    results_elasticnet_tuned[name] = {
+        "BestParams": best_params,
+        "CV_R²": random_search.best_score_,
+        "Test_R²": r2,
+        "Test_RMSE": rmse,
+        "Test_PCC": pcc
+    }
+    print(f"{name.upper()} — CV R²={random_search.best_score_:.3f}, Test R²={r2:.3f}\n")
+
+fig, axes = plt.subplots(2, 4, figsize=(16, 10))
+axes = axes.flatten()
+
+for ax, (name, model) in zip(axes, best_models.items()):
+    X_test, y_test = test_datasets[name]
+    y_pred = model.predict(X_test)
+    res = results_elasticnet_tuned[name]
+    
+    ax.scatter(y_test, y_pred, alpha=0.6)
+    lims = [min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())]
+    ax.plot(lims, lims, "r--")
+    ax.set_xlim(0, 13)
+    ax.set_ylim(0, 12)
+    
+    ax.set_title(f"{name.upper()}\nR²={res['Test_R²']:.3f}, RMSE={res['Test_RMSE']:.3f}, PCC={res['Test_PCC']:.3f}")
+    ax.set_xlabel("True pK")
+    ax.set_ylabel("Predicted pK")
+    ax.grid(True, linestyle="--", alpha=0.5)
+
+for ax in axes[len(test_datasets):]:
+    ax.set_visible(False)
+
+save_plot("elasticnet_tuned_per_split", "ElasticNet RandomizedSearchCV — Tuned per OOD Split")
+#
 # --------------------------------------------------------------------------
 # HistGradientBoosting baseline
 # --------------------------------------------------------------------------
@@ -217,7 +287,9 @@ best_models, results_hgb_tuned = {}, {}
 
 for name, (X_train, y_train) in train_datasets.items():
     print(f"\nTraining {name.upper()} split...")
-    base_model = HistGradientBoostingRegressor(random_state=42)
+    
+    base_model = HistGradientBoostingRegressor(random_state=42) 
+    
     random_search = RandomizedSearchCV(
         estimator=base_model,
         param_distributions=param_dist,
@@ -232,20 +304,18 @@ for name, (X_train, y_train) in train_datasets.items():
     # Save CV results
     cv_hgb_df = pd.DataFrame(random_search.cv_results_)
     cv_hgb_df.to_csv(f"plots_molformer/hgb_cv_results_{name}.csv", index=False)
+    
+    best_model = random_search.best_estimator_ 
     best_params = random_search.best_params_
-    best_model = HistGradientBoostingRegressor(
-        **best_params,
-        random_state=42,
-        early_stopping=True,
-        validation_fraction=0.1
-    )
-    best_model.fit(X_train, y_train)
+    
     best_models[name] = best_model
     X_test, y_test = test_datasets[name]
     y_pred = best_model.predict(X_test)
+    
     r2 = r2_score(y_test, y_pred)
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     pcc = np.corrcoef(y_test, y_pred)[0, 1]
+    
     results_hgb_tuned[name] = {
         "BestParams": best_params,
         "CV_R²": random_search.best_score_,
@@ -326,13 +396,13 @@ save_plot("xgb_baseline_per_split", "XGBoost Regression per OOD Split")
 # XGBoost tuned (RandomizedSearchCV)
 # --------------------------------------------------------------------------
 param_dist_xgb = {
-    'n_estimators': randint(300, 1200),          
-    'learning_rate': loguniform(1e-3, 0.1),       
-    'max_depth': randint(3, 8),                   
-    'subsample': uniform(0.7, 0.3),               
-    'colsample_bytree': uniform(0.7, 0.3),        
-    'reg_alpha': loguniform(1e-3, 10),            
-    'reg_lambda': loguniform(0.1, 50)             
+    'n_estimators': randint(300, 1200),            
+    'learning_rate': loguniform(1e-3, 0.1),         
+    'max_depth': randint(3, 8),                     
+    'subsample': uniform(0.7, 0.3),                 
+    'colsample_bytree': uniform(0.7, 0.3),          
+    'reg_alpha': loguniform(1e-3, 10),              
+    'reg_lambda': loguniform(0.1, 50)               
 }
 
 best_models_xgb, results_xgb_tuned = {}, {}
@@ -352,7 +422,7 @@ for name, (X_train, y_train) in train_datasets.items():
         param_distributions=param_dist_xgb,
         n_iter=20,
         scoring='r2',
-        cv=cv_folds[name],       # predefined splits
+        cv=cv_folds[name],
         verbose=2,
         random_state=42,
         n_jobs=-1,
@@ -363,16 +433,9 @@ for name, (X_train, y_train) in train_datasets.items():
     cv_xgb_df = pd.DataFrame(random_search.cv_results_)
     cv_xgb_df.to_csv(f"plots_molformer/xgb_cv_results_{name}.csv", index=False)
 
+    best_model = random_search.best_estimator_ 
     best_params = random_search.best_params_
-    best_model = XGBRegressor(
-        **best_params,
-        objective='reg:squarederror',
-        eval_metric='rmse',
-        tree_method='hist',
-        device='cuda',
-        random_state=42)
-
-    best_model.fit(X_train, y_train)
+    
     best_models_xgb[name] = best_model
 
     X_test, y_test = test_datasets[name]

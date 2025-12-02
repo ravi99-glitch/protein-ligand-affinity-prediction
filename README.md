@@ -22,7 +22,7 @@ The project runs in a Conda environment defined in `pa2.yml`
 
 **Main dependencies:**
 Python 3.9
-NumPy, Pandas, Matplotlib, Seaborn, tqdm
+NumPy, Pandas, Matplotlib, Seaborn
 scikit-learn, XGBoost
 BioPython, RDKit
 
@@ -31,7 +31,7 @@ BioPython, RDKit
 This project was developed as part of an applied research initiative in computational drug discovery.
 It explores the intersection of bioinformatics, machine learning, and structural biology to build interpretable, generalizable protein–ligand prediction models.
 
-Authors: Ravidu Nakandalage
+Author: Ravidu Nakandalage
 Institution: Zurich University of Applied Sciences (ZHAW), 2025
 
 

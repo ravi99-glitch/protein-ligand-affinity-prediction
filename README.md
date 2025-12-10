@@ -21,7 +21,7 @@ This project aims to:
 The project runs in a Conda environment defined in `pa2.yml`
 
 **Main dependencies:**
-Python 3.9
+Python 3.10
 NumPy, Pandas, Matplotlib, Seaborn
 scikit-learn, XGBoost
 BioPython, RDKit

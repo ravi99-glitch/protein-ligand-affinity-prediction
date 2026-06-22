@@ -2,7 +2,7 @@
 
 ![Python 3.10](https://img.shields.io/badge/Python-3.10-blue.svg)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.2-EE4C2C.svg)
-![scikit-learn](https://img.shields.io/badge/scikit-learn-1.5-F7931E.svg)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5-F7931E.svg)
 ![RDKit](https://img.shields.io/badge/RDKit-2024.03-green.svg)
 
 Predicting the binding affinity between proteins and small molecules is a critical bottleneck in early-stage computational drug discovery. 
